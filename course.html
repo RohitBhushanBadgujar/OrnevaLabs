@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Course Details | Orneva Labs</title>
+  <meta name="description" content="Detailed curriculum, prerequisites, deliverables, and outcomes for Orneva Labs micro-sprints." />
+  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
+</head>
+<body>
+
+  <!-- Ambient Glowing Backdrop -->
+  <div class="ambient-glow-wrapper" aria-hidden="true">
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
+    <div class="bg-grid-pattern"></div>
+  </div>
+
+  <!-- Global Loader -->
+  <div id="orneva-global-loader" aria-label="Loading course details">
+    <div class="loader-logo-ring">
+      <div class="loader-ring-spinner"></div>
+      <img src="assets/logo.png" alt="Orneva Labs" />
+    </div>
+    <div class="loader-text">Loading Curriculum...</div>
+  </div>
+
+  <!-- Navigation -->
+  <header class="site-navbar">
+    <div class="container nav-container">
+      <a href="index.html" class="brand-link" aria-label="Orneva Labs Home">
+        <img src="assets/logo.png" alt="Orneva Labs Logo" class="brand-logo-img" />
+        <div class="brand-text-block">
+          <span class="brand-title">Orneva Labs</span>
+          <span class="brand-tagline-micro">The Origin of New Possibilities</span>
+        </div>
+      </a>
+
+      <nav aria-label="Main Navigation">
+        <ul class="nav-links">
+          <li><a href="index.html" class="nav-link">Home</a></li>
+          <li><a href="courses.html" class="nav-link active">Courses</a></li>
+          <li><a href="about.html" class="nav-link">About</a></li>
+          <li><a href="index.html#how-it-works" class="nav-link">How It Works</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-right-actions">
+        <div class="nav-auth-slot">
+          <a href="login.html" class="btn-nav-login">Sign In</a>
+        </div>
+        <button class="nav-mobile-toggle" aria-label="Toggle navigation menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <!-- Dynamic Hook Container (Hydrated by js/course.js) -->
+      <div id="course-detail-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-col">
+          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+            <img src="assets/logo.png" alt="Orneva Labs Logo" style="height: 40px; width: auto;" />
+            <span style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase;">Orneva Labs</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.6;">
+            "The Origin of New Possibilities"<br>
+            Learn something useful. Build something real.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h5>Platform</h5>
+          <ul class="footer-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="courses.html">All Courses</a></li>
+            <li><a href="about.html">About & Mission</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h5>Students</h5>
+          <ul class="footer-links">
+            <li><a href="login.html">Sign In</a></li>
+            <li><a href="dashboard.html">My Dashboard</a></li>
+            <li><a href="payment-pending.html">Track Payment</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h5>Need Assistance?</h5>
+          <ul class="footer-links">
+            <li><a href="https://wa.me/919172750062" target="_blank">WhatsApp Support (+91 9172750062)</a></li>
+            <li><a href="admin-login.html">Admin Login</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>&copy; 2026 Orneva Labs. All rights reserved.</div>
+        <div style="color: var(--text-muted);">Empowering practical student execution.</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/course.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
