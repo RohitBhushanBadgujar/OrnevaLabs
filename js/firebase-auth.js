@@ -47,18 +47,20 @@
         return "Sign-in popup was blocked by your browser. Please allow popups for this site.";
       case "auth/unauthorized-domain":
         return "This domain is not authorized in Firebase Console. Please add it to Authentication -> Settings -> Authorized Domains.";
+      case "auth/configuration-not-found":
+        return "Authentication is not enabled yet in your Firebase project. In Firebase Console, click Build -> Authentication -> Get Started.";
       case "auth/operation-not-allowed":
-        return "This authentication provider is not enabled in Firebase Console. Please enable it in Authentication -> Sign-in method.";
-      case "auth/account-exists-with-different-credential":
-        return "An account already exists with this email using a different sign-in provider.";
-      case "auth/network-request-failed":
-        return "Network connectivity issue. Please check your internet connection.";
-      case "auth/too-many-requests":
-        return "Access temporarily blocked due to multiple failed login attempts. Try again later or reset password.";
-      case "auth/requires-recent-login":
-        return "This sensitive operation requires you to sign in again.";
-      default:
-        return msg.replace("Firebase: ", "").replace(/\(auth\/[^)]+\)\.?/, "").trim() || "Authentication failed.";
+        return "Google Sign-In is not enabled yet. In Firebase Console, go to Authentication -> Sign-in method and enable Google.";
+      default: {
+        let clean = msg.replace(/^Firebase:\s*/i, '').replace(/\(auth\/[^)]+\)\.?/i, '').trim();
+        if (!clean || clean.toLowerCase() === 'error') {
+          if (code.includes('configuration-not-found') || code.includes('operation-not-allowed')) {
+            return "Google Sign-In is not enabled yet. In Firebase Console, go to Authentication -> Sign-in method and enable Google.";
+          }
+          return code ? `Authentication notice: ${code}. Please verify Firebase Console settings.` : "Authentication failed. Please check console.";
+        }
+        return clean;
+      }
     }
   }
 

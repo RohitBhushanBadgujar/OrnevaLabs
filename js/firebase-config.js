@@ -17,12 +17,13 @@
   } catch (e) {}
 
   window.ORNEVA_FIREBASE_CONFIG = window.ORNEVA_FIREBASE_CONFIG || savedConfig || {
-    apiKey: "AIzaSyDummyKeyForOrnevaLabsDemoMode_ReplaceWithYourKey",
+    apiKey: "AIzaSyCq3GQNNts1i8KbwGDu4DsrrulKCEThtj4",
     authDomain: "orneva-labs.firebaseapp.com",
     projectId: "orneva-labs",
-    storageBucket: "orneva-labs.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:abcdef1234567890"
+    storageBucket: "orneva-labs.firebasestorage.app",
+    messagingSenderId: "993550102400",
+    appId: "1:993550102400:web:2123351976922d6ccc9b65",
+    measurementId: "G-GR4RXQ13DB"
   };
 
   // Helper function to check if live Firebase credentials have been configured
