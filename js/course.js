@@ -1,6 +1,6 @@
 /**
  * ORNEVA LABS - Individual Course Detail Controller
- * Dynamic loading by ?slug=..., curriculum accordion, outcomes, enroll checkout
+ * Dynamic loading by ?slug=..., curriculum accordion, outcomes, dynamic enroll/access CTA
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Render Full Course Page
-  function renderCourse(course) {
+  function renderCourse(course, userEnrollments = []) {
     // Dynamic SEO
     document.title = `${course.title} | Orneva Labs`;
     const metaDesc = $('meta[name="description"]');
@@ -97,6 +97,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       </div>
     `).join('');
+
+    // Dynamic Enrollment CTA Button
+    let ctaHtml = `
+      <a href="payment.html?courseId=${encodeURIComponent(course.courseId)}&slug=${encodeURIComponent(course.slug)}" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem; margin-bottom: 1.25rem;">
+        Enroll Now
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    `;
+
+    const matchEnr = (userEnrollments || []).find(e => e.courseId === course.courseId);
+    if (matchEnr) {
+      if (matchEnr.status === 'ACTIVE') {
+        ctaHtml = `
+          <a href="dashboard.html" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem; margin-bottom: 1.25rem; background: #10b981; border-color: #10b981; box-shadow: 0 4px 15px rgba(16,185,129,0.3);">
+            Open in Student Dashboard
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </a>
+        `;
+      } else if (matchEnr.status === 'PENDING_APPROVAL') {
+        ctaHtml = `
+          <a href="payment-pending.html?txn=${encodeURIComponent(matchEnr.transactionId)}" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem; margin-bottom: 1.25rem; background: #f59e0b; border-color: #f59e0b; color: #000; box-shadow: 0 4px 15px rgba(245,158,11,0.3);">
+            Verification in Progress
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+          </a>
+        `;
+      }
+    }
 
     courseDetailContainer.innerHTML = `
       <div class="course-detail-layout" style="display: grid; grid-template-columns: 1fr 380px; gap: 3.5rem; align-items: start; padding: 3rem 0 5rem;">
@@ -188,10 +215,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               </div>
             </div>
 
-            <a href="payment.html?courseId=${encodeURIComponent(course.courseId)}&slug=${encodeURIComponent(course.slug)}" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem; margin-bottom: 1.25rem;">
-              Enroll Now
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </a>
+            ${ctaHtml}
 
             <div style="font-size: 0.82rem; color: var(--text-muted); text-align: center; margin-bottom: 1.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -234,7 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Load Course
+  // Load Course & Enrollments
   renderLoading();
   try {
     const res = await window.OrnevaAPI.getCourseBySlug(slug);
@@ -242,7 +266,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderNotFound(res ? res.error : "Course could not be loaded.");
       return;
     }
-    renderCourse(res.data);
+
+    let enrollments = [];
+    const student = window.OrnevaAuth ? window.OrnevaAuth.getStudent() : null;
+    if (student && student.studentId) {
+      try {
+        const enrRes = await window.OrnevaAPI.getStudentEnrollments(student.studentId, student.email);
+        if (enrRes && enrRes.success) enrollments = enrRes.data || [];
+      } catch (e) {}
+    }
+
+    renderCourse(res.data, enrollments);
   } catch (e) {
     console.error("Course detail error:", e);
     renderNotFound("A network failure prevented loading this course. Please try again.");

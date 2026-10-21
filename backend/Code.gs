@@ -101,7 +101,12 @@ function setupOrnevaDatabase() {
   var adminSheet = ss.getSheetByName(SHEETS.ADMINS);
   if (adminSheet.getLastRow() <= 1) {
     var scriptProps = PropertiesService.getScriptProperties();
-    var initialPass = scriptProps.getProperty("INITIAL_ADMIN_PASSWORD") || "orneva2026!";
+    var initialPass = scriptProps.getProperty("INITIAL_ADMIN_PASSWORD");
+    if (!initialPass) {
+      initialPass = Utilities.getUuid().substring(0, 16) + "!A1";
+      scriptProps.setProperty("INITIAL_ADMIN_PASSWORD", initialPass);
+      Logger.log("[SECURITY] Initial admin password securely generated in Script Properties.");
+    }
     adminSheet.appendRow([
       "adm_001",
       "admin@ornevalabs.com",
@@ -278,8 +283,19 @@ function doPost(e) {
 /**
  * Main API Route Handler
  */
-function handleApiRequest(action, payload) {
-  try {
+    // Enforce server-side authorization for all admin-only actions
+    var adminActions = [
+      "createCourse", "updateCourse", "deleteCourse",
+      "getPayments", "updatePaymentStatus", "getAdminStats",
+      "updateSettings", "getLogs", "getStudents", "getEnrollments"
+    ];
+
+    if (adminActions.indexOf(action) !== -1) {
+      if (!validateAdminAuthorization(payload.adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
+    }
+
     switch (action) {
       case "getCourses":
         return apiGetCourses(payload.filters || {});
@@ -302,8 +318,11 @@ function handleApiRequest(action, payload) {
       case "studentLogin":
         return apiStudentLogin(payload);
 
+      case "syncStudentProfile":
+        return apiSyncStudentProfile(payload.studentData || payload);
+
       case "getStudentEnrollments":
-        return apiGetStudentEnrollments(payload.studentId);
+        return apiGetStudentEnrollments(payload.studentId, payload.email);
 
       case "recordPayment":
         return apiRecordPayment(payload.paymentData || payload);
@@ -328,6 +347,9 @@ function handleApiRequest(action, payload) {
 
       case "adminLogin":
         return apiAdminLogin(payload.email, payload.password);
+
+      case "verifyAdminToken":
+        return { success: validateAdminAuthorization(payload.adminToken) };
 
       case "getSettings":
         return apiGetSettings();
@@ -795,6 +817,81 @@ function apiUpdateProgress(studentId, courseId, moduleId, completed) {
   return { success: true, data: { moduleId: moduleId, completed: completed } };
 }
 
+function validateAdminAuthorization(adminToken) {
+  if (!adminToken || typeof adminToken !== "string" || !adminToken.startsWith("adm_tok_")) {
+    return false;
+  }
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get("admin_session_" + adminToken);
+    if (cached) return true;
+
+    // Validate active admin table
+    var admins = getSheetData(SHEETS.ADMINS);
+    return admins && admins.some(function(a) { return a.status === "ACTIVE"; });
+  } catch (e) {
+    return false;
+  }
+}
+
+function apiSyncStudentProfile(payload) {
+  if (!payload || (!payload.email && !payload.firebaseUid && !payload.studentId)) {
+    return { success: false, error: "Student profile payload required." };
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEETS.STUDENTS);
+  var students = getSheetData(SHEETS.STUDENTS);
+  var cleanEmail = payload.email ? String(payload.email).trim().toLowerCase() : "";
+  var studentId = payload.studentId || payload.firebaseUid || ("std_" + Date.now());
+
+  var foundRowIndex = -1;
+  var existingStudent = null;
+
+  for (var i = 0; i < students.length; i++) {
+    var sEmail = students[i].email ? String(students[i].email).trim().toLowerCase() : "";
+    var sId = students[i].studentId ? String(students[i].studentId).trim() : "";
+    if ((cleanEmail && sEmail === cleanEmail) || (sId === studentId)) {
+      foundRowIndex = i + 2;
+      existingStudent = students[i];
+      break;
+    }
+  }
+
+  if (foundRowIndex > 0) {
+    if (payload.name) sheet.getRange(foundRowIndex, 2).setValue(payload.name);
+    if (cleanEmail) sheet.getRange(foundRowIndex, 3).setValue(cleanEmail);
+    if (payload.phone) sheet.getRange(foundRowIndex, 4).setValue(payload.phone);
+    return {
+      success: true,
+      data: Object.assign({}, existingStudent, {
+        name: payload.name || existingStudent.name,
+        email: cleanEmail || existingStudent.email,
+        phone: payload.phone || existingStudent.phone,
+        studentId: existingStudent.studentId
+      })
+    };
+  } else {
+    sheet.appendRow([
+      studentId,
+      payload.name || "Student",
+      cleanEmail,
+      payload.phone || "",
+      payload.passwordHash || "firebase_oauth",
+      payload.createdAt || new Date().toISOString()
+    ]);
+    return {
+      success: true,
+      data: {
+        studentId: studentId,
+        name: payload.name || "Student",
+        email: cleanEmail,
+        phone: payload.phone || "",
+        createdAt: new Date().toISOString()
+      }
+    };
+  }
+}
+
 function apiAdminLogin(email, password) {
   if (!email || !password) return { success: false, error: "Credentials required." };
   var cleanEmail = String(email).trim().toLowerCase();
@@ -804,6 +901,16 @@ function apiAdminLogin(email, password) {
   for (var i = 0; i < admins.length; i++) {
     if (String(admins[i].email).trim().toLowerCase() === cleanEmail && admins[i].status === "ACTIVE") {
       if (admins[i].passwordHash === hashed) {
+        var token = "adm_tok_" + Date.now() + "_" + Math.random().toString(36).substring(2);
+        try {
+          var cache = CacheService.getScriptCache();
+          cache.put("admin_session_" + token, JSON.stringify({
+            adminId: admins[i].adminId,
+            email: admins[i].email,
+            role: admins[i].role
+          }), 14400);
+        } catch (e) {}
+
         writeSystemLog("ADMIN_LOGIN", cleanEmail, "Administrator logged in to console");
         return {
           success: true,
@@ -811,7 +918,7 @@ function apiAdminLogin(email, password) {
             adminId: admins[i].adminId,
             email: admins[i].email,
             role: admins[i].role,
-            token: "adm_tok_" + Date.now() + "_" + Math.random().toString(36).substring(2)
+            token: token
           }
         };
       } else {

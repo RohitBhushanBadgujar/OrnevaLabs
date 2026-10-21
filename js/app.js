@@ -87,4 +87,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
   window.addEventListener('scroll', handleScroll, { passive: true });
+
+  // 6. Dark / Light Theme Controller
+  const storedTheme = localStorage.getItem('orneva_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', storedTheme);
+
+  const navRight = document.querySelector('.nav-right-actions');
+  if (navRight && !document.getElementById('orneva-theme-toggle')) {
+    const toggleBtn = document.createElement('button');
+    toggleBtn.id = 'orneva-theme-toggle';
+    toggleBtn.className = 'theme-toggle-btn';
+    toggleBtn.setAttribute('type', 'button');
+    toggleBtn.setAttribute('aria-label', 'Toggle theme mode');
+
+    const updateIcon = (theme) => {
+      toggleBtn.innerHTML = theme === 'light'
+        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`
+        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+      toggleBtn.setAttribute('title', theme === 'light' ? 'Switch to Dark Theme' : 'Switch to Light Theme');
+    };
+
+    updateIcon(storedTheme);
+
+    toggleBtn.addEventListener('click', () => {
+      const active = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', active);
+      localStorage.setItem('orneva_theme', active);
+      updateIcon(active);
+    });
+
+    const authSlot = navRight.querySelector('.nav-auth-slot');
+    if (authSlot) {
+      navRight.insertBefore(toggleBtn, authSlot);
+    } else {
+      navRight.appendChild(toggleBtn);
+    }
+  }
 });

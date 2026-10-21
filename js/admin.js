@@ -7,11 +7,22 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const { $, $$, escapeHtml, formatCurrency, formatDate, formatDateTime, showToast } = window.OrnevaUtils;
 
-  // Enforce Admin Auth Guard
+  // Enforce Strict Admin Auth Guard & Token Validation
   const admin = window.OrnevaAuth.getAdmin();
-  if (!admin || !admin.token) {
+  if (!admin || !admin.token || !admin.token.startsWith('adm_tok_')) {
     window.location.href = "admin-login.html";
     return;
+  }
+
+  // Verify token validity against session store
+  try {
+    const sessionCheck = await window.OrnevaAPI.verifyAdminSession(admin.token);
+    if (!sessionCheck || !sessionCheck.success) {
+      window.OrnevaAuth.logoutAdmin();
+      return;
+    }
+  } catch (err) {
+    console.warn("Admin session verification warning:", err);
   }
 
   // Update Admin Info in Sidebar

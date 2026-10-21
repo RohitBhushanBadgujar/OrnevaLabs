@@ -16,12 +16,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Update Welcome Banner
+  // Update Welcome Banner & Avatar
   const studentNameEl = $('#student-welcome-name');
   if (studentNameEl) studentNameEl.textContent = student.name;
 
   const studentEmailEl = $('#student-welcome-email');
   if (studentEmailEl) studentEmailEl.textContent = student.email;
+
+  const avatarSlot = $('#student-avatar-slot');
+  if (avatarSlot) {
+    if (student.photoURL) {
+      avatarSlot.innerHTML = `<img src="${escapeHtml(student.photoURL)}" alt="${escapeHtml(student.name)}" style="width: 58px; height: 58px; border-radius: 50%; border: 2.5px solid var(--primary); object-fit: cover; box-shadow: 0 4px 15px rgba(255,87,34,0.25);" />`;
+    } else {
+      const initial = student.name ? student.name.charAt(0).toUpperCase() : 'S';
+      avatarSlot.innerHTML = `<div style="width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, #ff784e 100%); color: #fff; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(255,87,34,0.3); border: 2px solid rgba(255,255,255,0.15);">${escapeHtml(initial)}</div>`;
+    }
+  }
 
   // Render Skeleton Loading
   function renderLoading() {
@@ -51,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function loadDashboard() {
     renderLoading();
     try {
-      const res = await window.OrnevaAPI.getStudentEnrollments(student.studentId);
+      const res = await window.OrnevaAPI.getStudentEnrollments(student.studentId, student.email);
       if (!res || !res.success) {
         dashboardContainer.innerHTML = `
           <div class="state-box state-box-error glass-card">

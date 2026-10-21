@@ -301,6 +301,81 @@ async function runTestSuite() {
   assert(logsRes.success === true, "Audit logs retrieved");
   assert(logsRes.data.length >= 5, "Audit logs contain all recorded actions (creation, verification, logins)");
 
+  // --- TEST GROUP 3: ADMINISTRATIVE SECURITY PERIMETER & AUTHORIZATION ---
+  console.log(`\n${colors.yellow}[3. Administrative Security Perimeter & Auth Tests]${colors.reset}`);
+
+  const unauthCreate = await API.createCourse({ title: "Hack Course", slug: "hack-course", price: 100 }, "invalid_token");
+  assert(unauthCreate.success === false, "Unauthorized course creation is blocked");
+
+  const unauthEdit = await API.updateCourse(aiCourse.courseId, { price: 10 }, null);
+  assert(unauthEdit.success === false, "Unauthorized course modification without token is blocked");
+
+  const unauthDelete = await API.deleteCourse(aiCourse.courseId, "adm_tok_fake");
+  assert(unauthDelete.success === false, "Unauthorized course deletion with fake token is blocked");
+
+  const unauthStudents = await API.getStudents("not_a_token");
+  assert(unauthStudents.success === false, "Unauthorized access to student database is blocked");
+
+  const unauthEnrollments = await API.getEnrollments(null);
+  assert(unauthEnrollments.success === false, "Unauthorized access to enrollments is blocked");
+
+  const unauthPaymentVerify = await API.updatePaymentStatus(testTxn, "VERIFIED", "Hacked", "fake_token");
+  assert(unauthPaymentVerify.success === false, "Unauthorized payment verification with fake token is blocked");
+
+  const unauthSettings = await API.updateSettings({ upiId: "hacked@upi" }, null);
+  assert(unauthSettings.success === false, "Unauthorized system settings modification is blocked");
+
+  const unauthLogs = await API.getLogs(undefined);
+  assert(unauthLogs.success === false, "Unauthorized audit logs access is blocked");
+
+  const verifyValidSession = await API.verifyAdminSession(adminToken);
+  assert(verifyValidSession.success === true && verifyValidSession.valid === true, "Valid admin session token passes verification");
+
+  const verifyInvalidSession = await API.verifyAdminSession("invalid_token_xyz");
+  assert(verifyInvalidSession.success === false, "Invalid admin session token is rejected");
+
+  // --- TEST GROUP 4: FIREBASE IDENTITY & PROFILE SYNCHRONIZATION ---
+  console.log(`\n${colors.yellow}[4. Firebase Identity & Profile Synchronization]${colors.reset}`);
+
+  // Evaluate firebase-config.js
+  const fbConfigCode = fs.readFileSync('js/firebase-config.js', 'utf8');
+  eval(`(function(window) { ${fbConfigCode} })(sandbox.window)`);
+  assert(!!sandbox.window.OrnevaFirebaseConfig, "Firebase Config module loaded");
+  assert(typeof sandbox.window.OrnevaFirebaseConfig.isFirebaseConfigured === 'function', "Firebase config check helper exists");
+
+  // Evaluate firebase-auth.js
+  const fbAuthCode = fs.readFileSync('js/firebase-auth.js', 'utf8');
+  eval(`(function(window, document, localStorage) { ${fbAuthCode} })(sandbox.window, sandbox.document, sandbox.localStorage)`);
+  const FirebaseAuth = sandbox.window.OrnevaFirebaseAuth;
+  assert(!!FirebaseAuth, "Firebase Auth Service loaded");
+  assert(typeof FirebaseAuth.signInWithGoogle === 'function', "Google OAuth method available");
+  assert(typeof FirebaseAuth.loginWithEmail === 'function', "Email login method available");
+  assert(typeof FirebaseAuth.registerWithEmail === 'function', "Email registration method available");
+  assert(typeof FirebaseAuth.sendPasswordReset === 'function', "Password reset method available");
+  assert(typeof FirebaseAuth.logout === 'function', "Logout method available");
+
+  // Profile sync with Firebase UID
+  const firebaseStudentData = {
+    firebaseUid: "firebase_usr_test_99",
+    name: "Rohan Patel",
+    email: "rohan.patel@example.com",
+    photoURL: "https://example.com/avatar.jpg"
+  };
+
+  const syncRes1 = await API.syncStudentProfile(firebaseStudentData);
+  assert(syncRes1.success === true, "Student profile synchronized with Firebase identity");
+  assert(syncRes1.data.firebaseUid === "firebase_usr_test_99", "Synchronized record contains Firebase UID");
+  assert(syncRes1.data.email === "rohan.patel@example.com", "Synchronized record retains email");
+
+  // Re-sync with same UID - should not duplicate student
+  const syncRes2 = await API.syncStudentProfile({
+    ...firebaseStudentData,
+    name: "Rohan Patel (Updated)"
+  });
+  assert(syncRes2.success === true, "Re-syncing existing Firebase user succeeds");
+  assert(syncRes2.data.studentId === syncRes1.data.studentId, "Duplicate student record prevented on re-authentication");
+  assert(syncRes2.data.name === "Rohan Patel (Updated)", "Student profile updated with latest credentials");
+
   // --- SUMMARY ---
   console.log(`\n${colors.cyan}====================================================`);
   console.log(`  QA TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);

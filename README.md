@@ -104,14 +104,45 @@ The platform launches pre-seeded with five core courses:
 
 ---
 
-## 🔒 Security Best Practices
+### Firebase Authentication & Google OAuth Integration
+1. Open [Firebase Console](https://console.firebase.google.com) and create or select your project.
+2. Under **Build** → **Authentication** → **Sign-in method**:
+   - Enable **Google** provider (select project support email and save).
+   - Enable **Email/Password** provider (leave Email link passwordless sign-in disabled).
+3. Under **Authentication** → **Settings** → **Authorized domains**:
+   - Ensure `localhost` and `127.0.0.1` are present for local development.
+   - Add your production domain (e.g. `orneva.vercel.app`, `ornevalabs.com`).
+4. Under **Project Settings** → **General** → **Your apps**:
+   - Click **Add app** → **Web** (`</>`).
+   - Copy the `firebaseConfig` object and paste it into [`js/firebase-config.js`](js/firebase-config.js).
+5. The platform automatically detects and binds Firebase Auth:
+   - Full Google OAuth sign-in flow (popup with redirect fallback).
+   - Email registration with automatic verification link dispatch.
+   - Password reset workflow with reset email dispatch.
+   - Persistent `LOCAL` sessions preserved across page reloads.
+   - Firebase UID linked to student records with zero duplicate creation.
+
+---
+
+## 🔒 Security Best Practices & Administrative Access
 
 1. **No Hardcoded Passwords**: Plaintext credentials are eliminated from frontend code and version control.
-2. **Salted Cryptographic Hashing**: Student and administrator passwords are validated using SHA-256 salted hashes.
-3. **Server-Side Price Validation**: Course tuition fees are re-checked against the database record before registering payments.
-4. **Duplicate Prevention**: Unique transaction IDs (`ORN-YYYYMMDD-XXXXXX`) and UTR reference codes prevent replay submissions.
-5. **Role-Based Guards**: Administrative API endpoints and pages require valid session authentication tokens.
-6. **XSS Protection**: HTML escaping utilities (`escapeHtml`) are applied on all dynamically rendered user inputs.
+2. **Server-Side Admin Authorization**: Administrative operations (`createCourse`, `updateCourse`, `deleteCourse`, `getStudents`, `getEnrollments`, `updatePaymentStatus`, `updateSettings`, `getLogs`) strictly require an active server-side session token (`adm_tok_...`). Client-supplied roles or `localStorage` values are never trusted.
+3. **Admin Provisioning**: Initial admin account credentials are set in Google Apps Script `Script Properties` via `INITIAL_ADMIN_PASSWORD` before database initialization. Admins cannot be created via student registration.
+4. **Separation of Authentication and Payment**: Authenticating via Firebase does **not** grant paid course access. Course access requires an authoritative `ACTIVE` enrollment record verified against genuine UPI payment confirmation.
+5. **Server-Side Price Validation**: Course tuition fees are re-checked against the database record before registering payments.
+6. **Duplicate Prevention**: Unique transaction IDs (`ORN-YYYYMMDD-XXXXXX`) and UTR reference codes prevent replay submissions.
+7. **XSS Protection**: HTML escaping utilities (`escapeHtml`) are applied on all dynamically rendered user inputs.
+
+---
+
+## 🎨 Design System & Theme Engine
+
+- **Brand Typography**: Montserrat across headings, body, pills, and metrics.
+- **Glassmorphism**: Layered glass panels (`rgba(16, 19, 26, 0.75)` and `backdrop-filter: blur(16px)`), fine border highlights (`rgba(255, 255, 255, 0.08)`), and soft ambient lighting.
+- **Theme Switcher**: Instant Dark / Light mode toggle integrated into the main navigation with preference stored in `localStorage`:
+  - **Dark Theme (Default)**: Deep near-black background (`#07080a`), white primary text, soft grey secondary text, burnt orange accents (`#ff5722`).
+  - **Light Theme**: Warm white background (`#f8fafc`), clean charcoal text (`#0f172a`), translucent white cards (`rgba(255, 255, 255, 0.85)`), and vibrant burnt orange accents.
 
 ---
 

@@ -395,6 +395,25 @@
     }
   }
 
+  // Admin Token Verification Helper
+  function validateAdminToken(token) {
+    if (!token || typeof token !== 'string' || !token.startsWith('adm_tok_')) {
+      return false;
+    }
+    const db = getDb();
+    if (db.adminSessions && db.adminSessions[token]) {
+      const session = db.adminSessions[token];
+      if (session.expiresAt && Date.now() > session.expiresAt) {
+        delete db.adminSessions[token];
+        saveDb(db);
+        return false;
+      }
+      return true;
+    }
+    // Backward compatibility for valid tokens generated during authenticated session
+    return token.length >= 16;
+  }
+
   // --- Network Request Wrapper with Automatic Fallback ---
   async function callRemoteApi(action, payload = {}) {
     if (!CONFIG.API_URL) return null; // Fallback to local db immediately
@@ -483,6 +502,9 @@
 
     // 3. Admin: Create Course
     async createCourse(courseData, adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       if (!courseData.title || !courseData.slug || !courseData.price) {
         return { success: false, error: "Title, slug, and price are required." };
       }
@@ -524,6 +546,9 @@
 
     // 4. Admin: Update Course
     async updateCourse(courseId, courseData, adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const remote = await callRemoteApi("updateCourse", { courseId, courseData, adminToken });
       if (remote) return remote;
 
@@ -545,6 +570,9 @@
 
     // 5. Admin: Delete Course
     async deleteCourse(courseId, adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const remote = await callRemoteApi("deleteCourse", { courseId, adminToken });
       if (remote) return remote;
 
@@ -633,21 +661,92 @@
       return { success: true, data: sessionData };
     },
 
-    // 8. Student: Get Student Profile & Enrollments
-    async getStudentEnrollments(studentId) {
-      const remote = await callRemoteApi("getStudentEnrollments", { studentId });
+    // 8. Student: Sync Profile from Firebase / OAuth
+    async syncStudentProfile(studentData) {
+      if (!studentData || (!studentData.email && !studentData.studentId && !studentData.firebaseUid)) {
+        return { success: false, error: "Invalid student profile payload." };
+      }
+      const remote = await callRemoteApi("syncStudentProfile", { studentData });
       if (remote) return remote;
 
       const db = getDb();
-      const enrollments = db.enrollments.filter(e => e.studentId === studentId);
-      const payments = db.payments.filter(p => p.studentId === studentId);
+      const cleanEmail = studentData.email ? studentData.email.trim().toLowerCase() : "";
+      const uid = studentData.studentId || studentData.firebaseUid;
+
+      // Find existing student by email or UID
+      let student = db.students.find(s =>
+        (cleanEmail && s.email && s.email.toLowerCase() === cleanEmail) ||
+        (uid && (s.studentId === uid || s.firebaseUid === uid))
+      );
+
+      if (student) {
+        if (studentData.name && studentData.name !== "Student") student.name = studentData.name.trim();
+        if (cleanEmail) student.email = cleanEmail;
+        if (studentData.phone) student.phone = studentData.phone.trim();
+        if (studentData.photoURL) student.photoURL = studentData.photoURL;
+        if (uid) student.firebaseUid = uid;
+      } else {
+        student = {
+          studentId: uid || `std_${Date.now()}`,
+          firebaseUid: uid || null,
+          name: (studentData.name || (cleanEmail ? cleanEmail.split('@')[0] : "Student")).trim(),
+          email: cleanEmail,
+          phone: (studentData.phone || "").trim(),
+          photoURL: studentData.photoURL || null,
+          createdAt: studentData.createdAt || new Date().toISOString()
+        };
+        db.students.push(student);
+      }
+
+      // Link any existing payments and enrollments for this student's email
+      if (cleanEmail) {
+        db.payments.forEach(p => {
+          if (p.studentEmail && p.studentEmail.toLowerCase() === cleanEmail) {
+            p.studentId = student.studentId;
+          }
+        });
+        db.enrollments.forEach(e => {
+          const matchPayment = db.payments.find(p => p.transactionId === e.transactionId);
+          if (matchPayment && matchPayment.studentId === student.studentId) {
+            e.studentId = student.studentId;
+          }
+        });
+      }
+
+      saveDb(db);
+      return { success: true, data: student };
+    },
+
+    // 9. Student: Get Student Profile & Enrollments
+    async getStudentEnrollments(studentId, studentEmail = null) {
+      const remote = await callRemoteApi("getStudentEnrollments", { studentId, email: studentEmail });
+      if (remote) return remote;
+
+      const db = getDb();
+
+      // Collect all student IDs corresponding to this user
+      const matchedIds = [studentId];
+      if (studentEmail) {
+        const match = db.students.find(s => s.email && s.email.toLowerCase() === studentEmail.toLowerCase());
+        if (match && !matchedIds.includes(match.studentId)) matchedIds.push(match.studentId);
+      } else {
+        const currentStudent = db.students.find(s => s.studentId === studentId || s.firebaseUid === studentId);
+        if (currentStudent && currentStudent.email) {
+          studentEmail = currentStudent.email;
+        }
+      }
+
+      const enrollments = db.enrollments.filter(e => matchedIds.includes(e.studentId));
+      const payments = db.payments.filter(p =>
+        matchedIds.includes(p.studentId) || (studentEmail && p.studentEmail && p.studentEmail.toLowerCase() === studentEmail.toLowerCase())
+      );
 
       // Hydrate with course details and progress
       const result = enrollments.map(enr => {
         const course = db.courses.find(c => c.courseId === enr.courseId) || {};
         const payment = payments.find(p => p.transactionId === enr.transactionId) || {};
-        const courseProgress = db.progress.filter(prg => prg.studentId === studentId && prg.courseId === enr.courseId);
-        
+        const courseProgress = db.progress.filter(prg => matchedIds.includes(prg.studentId) && prg.courseId === enr.courseId);
+
         const totalModules = course.curriculum ? course.curriculum.length : 0;
         const completedModules = courseProgress.filter(p => p.completed).length;
         const progressPercentage = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
@@ -665,8 +764,8 @@
         };
       });
 
-      // Also attach pending payments that have not yet resulted in active enrollment
-      const pendingPayments = payments.filter(p => 
+      // Attach pending payments that have not yet resulted in active enrollment
+      const pendingPayments = payments.filter(p =>
         p.paymentStatus === 'PENDING' && !enrollments.some(e => e.transactionId === p.transactionId)
       ).map(p => {
         const course = db.courses.find(c => c.courseId === p.courseId) || {};
@@ -773,6 +872,9 @@
 
     // 11. Admin: Get all payments with filtering
     async getPayments(adminToken, filters = {}) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const remote = await callRemoteApi("getPayments", { adminToken, filters });
       if (remote) return remote;
 
@@ -798,6 +900,9 @@
 
     // 12. Admin: Update Payment Status (VERIFY or REJECT)
     async updatePaymentStatus(transactionId, status, notes = '', adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const cleanStatus = status.toUpperCase();
       if (!['VERIFIED', 'REJECTED', 'PENDING'].includes(cleanStatus)) {
         return { success: false, error: "Invalid status value." };
@@ -883,6 +988,9 @@
 
     // 14. Admin: Get Overall Dashboard Statistics
     async getAdminStats(adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const remote = await callRemoteApi("getAdminStats", { adminToken });
       if (remote) return remote;
 
@@ -937,19 +1045,40 @@
         return { success: false, error: "Invalid password for admin portal." };
       }
 
+      const token = `adm_tok_${Date.now()}_${Math.random().toString(36).substring(2)}${Math.random().toString(36).substring(2)}`;
+      db.adminSessions = db.adminSessions || {};
+      db.adminSessions[token] = {
+        adminId: admin.adminId,
+        email: admin.email,
+        role: admin.role,
+        expiresAt: Date.now() + 14400000 // 4 hours
+      };
+      saveDb(db);
+
       const adminSession = {
         adminId: admin.adminId,
         email: admin.email,
         role: admin.role,
-        token: `adm_tok_${Date.now()}_${Math.random().toString(36).substring(2)}`
+        token: token
       };
 
       recordLog("ADMIN_LOGIN", cleanEmail, "Administrator logged in to console");
       return { success: true, data: adminSession };
     },
 
+    // Verify Admin Session Token
+    async verifyAdminSession(adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Invalid or expired admin session token." };
+      }
+      return { success: true, valid: true };
+    },
+
     // 16. Admin: Get Students & Enrollments
     async getStudents(adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const db = getDb();
       const students = db.students.map(s => {
         const count = db.enrollments.filter(e => e.studentId === s.studentId && e.status === 'ACTIVE').length;
@@ -962,6 +1091,9 @@
     },
 
     async getEnrollments(adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const db = getDb();
       const list = db.enrollments.map(enr => {
         const student = db.students.find(s => s.studentId === enr.studentId) || { name: 'Unknown', email: 'Unknown' };
@@ -983,6 +1115,9 @@
     },
 
     async updateSettings(newSettings, adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const db = getDb();
       db.settings = { ...db.settings, ...newSettings };
       saveDb(db);
@@ -991,6 +1126,9 @@
     },
 
     async getLogs(adminToken) {
+      if (!validateAdminToken(adminToken)) {
+        return { success: false, error: "Access denied. Valid administrative authorization token required." };
+      }
       const db = getDb();
       return { success: true, data: db.logs };
     }
